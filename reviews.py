@@ -9,11 +9,23 @@ class ReviewItem(scrapy.Item):
 
 class ShopifyReviewSpider(scrapy.Spider):
     name = 'reviews'
+    custom_settings = { 
+      'DOWNLOD_DELAY': 1,
+      'FEED_FORMAT': 'csv',
+      'FEED_URI' : 'reviews.csv'
+    }
+    
+    headers = {} 
+    params = {}
+
+
     start_urls = [
       'https://apps.shopify.com/yotpo-subscription/reviews',
     ]
 
     def parse(self, response):
+        list = [] 
+
         for quote in response.css('div.review-listing '):
             item = ReviewItem()
             item['title'] =  quote.css('.review-listing-header__text::text').get().strip()
@@ -24,8 +36,10 @@ class ShopifyReviewSpider(scrapy.Spider):
             if item['location'] is not None:
               item['location'] = item['location'].strip()
 
-            yield item
+            # yield item
+            list.append(item)
 
         next_page = response.css('div.search-pagination a.search-pagination__next-page-text::attr("href")').get()
         if next_page is not None:
-            yield response.follow(next_page, self.parse)
+          # yield response.follow(next_page, self.parse)
+          yield response.follow(next_page, self.parse)
