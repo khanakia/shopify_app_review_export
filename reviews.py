@@ -1,4 +1,5 @@
 import scrapy
+import re
 
 class ReviewItem(scrapy.Item):
     title = scrapy.Field()
@@ -20,26 +21,45 @@ class ShopifyReviewSpider(scrapy.Spider):
 
 
     start_urls = [
-      'https://apps.shopify.com/yotpo-subscription/reviews',
+      'https://apps.shopify.com/example-app/reviews?sort_by=newest',
     ]
 
     def parse(self, response):
-        list = [] 
-
-        for quote in response.css('div.review-listing '):
+        for quote in response.css('div[data-merchant-review]'):
             item = ReviewItem()
-            item['title'] =  quote.css('.review-listing-header__text::text').get().strip()
-            item['rating'] = quote.css('.ui-star-rating')[0].xpath('@data-rating').get()
-            item['date'] = quote.css('div.review-metadata__item-label::text').get().strip()
-            item['content'] = quote.css('.review-content .truncate-content-copy p::text').get().strip()
-            item['location'] = quote.css('div.review-merchant-characteristic__item span::text').get()
-            if item['location'] is not None:
-              item['location'] = item['location'].strip()
+            # Title
+            item['title'] = quote.css('.tw-text-heading-xs.tw-text-fg-primary::attr(title)').get()
+            if not item['title']:
+                item['title'] = quote.css('.tw-text-heading-xs.tw-text-fg-primary::text').get()
+            if item['title']:
+                item['title'] = item['title'].strip()
 
-            # yield item
-            list.append(item)
+            # Rating: extract from aria-label
+            rating_label = quote.css('div[aria-label*="out of"]::attr(aria-label)').get()
+            if rating_label:
+                match = re.search(r'(\d+) out of', rating_label)
+                item['rating'] = int(match.group(1)) if match else None
+            else:
+                item['rating'] = None
 
-        next_page = response.css('div.search-pagination a.search-pagination__next-page-text::attr("href")').get()
-        if next_page is not None:
-          # yield response.follow(next_page, self.parse)
-          yield response.follow(next_page, self.parse)
+            # Date
+            item['date'] = quote.css('.tw-text-body-xs.tw-text-fg-tertiary::text').get()
+            if item['date']:
+                item['date'] = item['date'].replace('Edited', '').strip()
+
+            # Content: join all <p> tags in review content
+            content_paragraphs = quote.css('div[data-truncate-content-copy] p::text').getall()
+            item['content'] = '\n'.join([p.strip() for p in content_paragraphs if p.strip()])
+
+            # Location: the next <div> after the title
+            merchant_info_divs = quote.css('.tw-text-heading-xs.tw-text-fg-primary ~ div::text').get()
+            if merchant_info_divs:
+                item['location'] = merchant_info_divs.strip()
+            else:
+                item['location'] = None
+
+            yield item
+
+        next_page = response.css('a[rel="next"]::attr(href)').get()
+        if next_page:
+            yield response.follow(next_page, self.parse)
