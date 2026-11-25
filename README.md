@@ -14,4 +14,7 @@ python main.py
 
 
 ## Before a commit
-scripts/check-names.sh  (fails when a tracked file holds a name from the hashed deny list in .github/denyhash.txt)
+```sh
+git config core.hooksPath .githooks   # once per clone
+```
+The hooks run `scripts/check-names.sh`, which fails when a change or commit message holds a private name from a word list kept outside the repo (`~/.config/names-guard/terms.txt`); without the list it warns and passes.
